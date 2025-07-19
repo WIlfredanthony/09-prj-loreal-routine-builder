@@ -233,7 +233,7 @@ async function selectProduct(event) {
   }
 }
 
-/* Generate personalized routine using Cloudflare Worker */
+/* Generate personalized routine using Cloudflare Worker with web search */
 async function generatePersonalizedRoutine() {
   if (selectedProducts.length === 0) {
     chatWindow.innerHTML =
@@ -247,8 +247,8 @@ async function generatePersonalizedRoutine() {
   /* Check if we're in RTL mode */
   const isRTL = document.documentElement.getAttribute("dir") === "rtl";
   const loadingText = isRTL
-    ? "جاري إنشاء روتينك الشخصي..."
-    : "Generating your personalized routine...";
+    ? "جاري البحث وإنشاء روتينك الشخصي..."
+    : "Searching for latest information and generating your personalized routine...";
 
   chatWindow.innerHTML = `
     <p class="loading-message">
@@ -265,10 +265,10 @@ async function generatePersonalizedRoutine() {
       description: product.description,
     }));
 
-    /* Create the system message with RTL awareness */
+    /* Create the system message with RTL awareness and web search instructions */
     const systemContent = isRTL
-      ? "أنت خبير في مجال التجميل والعناية بالبشرة. قم بإنشاء روتين شخصي باستخدام المنتجات المختارة وأجب على الأسئلة المتعلقة بالروتين."
-      : "You are a beauty and skincare expert. Create personalized routines based on selected products and answer follow-up questions about the routine.";
+      ? "أنت خبير في مجال التجميل والعناية بالبشرة لمنتجات لوريال. ابحث في الويب عن أحدث المعلومات حول المنتجات المختارة واستخدم هذه المعلومات لإنشاء روتين شخصي. قم بتضمين المصادر والروابط في إجابتك."
+      : "You are a L'Oréal beauty and skincare expert. Search the web for the latest information about the selected products and use this current information to create personalized routines. Include sources and links in your response when available.";
 
     const systemMessage = {
       role: "system",
@@ -276,30 +276,34 @@ async function generatePersonalizedRoutine() {
     };
 
     const userContent = isRTL
-      ? `من فضلك قم بإنشاء روتين شخصي للتجميل/العناية بالبشرة باستخدام هذه المنتجات: ${JSON.stringify(
+      ? `ابحث في الويب عن أحدث المعلومات حول منتجات لوريال هذه ثم قم بإنشاء روتين شخصي للتجميل/العناية بالبشرة: ${JSON.stringify(
           productData
         )}. 
 
       يجب أن يتضمن:
+      - معلومات محدثة عن كل منتج من البحث على الإنترنت
       - خطوات روتين الصباح (إن أمكن)
       - خطوات روتين المساء (إن أمكن)
-      - ترتيب التطبيق
-      - نصائح للحصول على أفضل النتائج
-      - أي ملاحظات مهمة حول استخدام المنتج
+      - ترتيب التطبيق المحدث
+      - نصائح حديثة للحصول على أفضل النتائج
+      - أي تحديثات أو معلومات جديدة حول المنتجات
+      - المصادر والروابط للمعلومات المستخدمة
       
       قم بتنسيق الإجابة بطريقة واضحة وسهلة المتابعة.`
-      : `Please create a personalized beauty/skincare routine using these products: ${JSON.stringify(
+      : `Search the web for the latest information about these L'Oréal products and then create a personalized beauty/skincare routine: ${JSON.stringify(
           productData
         )}. 
       
       Include:
+      - Updated information about each product from web search
       - Morning routine steps (if applicable)
       - Evening routine steps (if applicable)  
-      - Order of application
-      - Tips for best results
-      - Any important notes about product usage
+      - Current recommended order of application
+      - Latest tips for best results
+      - Any recent updates or new information about the products
+      - Sources and links for the information used
       
-      Format the response in a clear, easy-to-follow way.`;
+      Format the response in a clear, easy-to-follow way with proper citations.`;
 
     const userMessage = {
       role: "user",
@@ -309,7 +313,7 @@ async function generatePersonalizedRoutine() {
     /* Add to conversation history */
     conversationHistory.push(systemMessage, userMessage);
 
-    /* Send request to Cloudflare Worker instead of directly to OpenAI */
+    /* Send request to Cloudflare Worker with web search enabled */
     const response = await fetch(WORKER_URL, {
       method: "POST",
       headers: {
@@ -317,8 +321,10 @@ async function generatePersonalizedRoutine() {
       },
       body: JSON.stringify({
         messages: conversationHistory,
-        max_tokens: 800,
+        max_tokens: 1200 /* Increased for web search results */,
         temperature: 0.7,
+        web_search: true /* Enable web search */,
+        include_citations: true /* Request citations */,
       }),
     });
 
@@ -328,18 +334,24 @@ async function generatePersonalizedRoutine() {
       /* Add AI response to conversation history */
       conversationHistory.push(data.choices[0].message);
 
+      /* Process the response to format citations and links */
+      let formattedContent = data.choices[0].message.content;
+
+      /* Format citations and links for better display */
+      formattedContent = formatCitationsAndLinks(formattedContent);
+
       /* Display the AI-generated routine with RTL-aware title */
       const routineTitle = isRTL
-        ? "روتينك الشخصي"
-        : "Your Personalized Routine";
+        ? "روتينك الشخصي (محدث بأحدث المعلومات)"
+        : "Your Personalized Routine (Updated with Latest Information)";
       const followUpText = isRTL
-        ? "<strong>💬 هل لديك أسئلة حول روتينك؟</strong> اسألني أي شيء في المحادثة أدناه!"
-        : "<strong>💬 Have questions about your routine?</strong> Ask me anything in the chat below!";
+        ? "<strong>💬 هل لديك أسئلة حول روتينك المحدث؟</strong> اسألني أي شيء في المحادثة أدناه!"
+        : "<strong>💬 Have questions about your updated routine?</strong> Ask me anything in the chat below!";
 
       chatWindow.innerHTML = `
         <h3>${routineTitle}</h3>
         <div class="routine-content">
-          ${data.choices[0].message.content.replace(/\n/g, "<br>")}
+          ${formattedContent.replace(/\n/g, "<br>")}
         </div>
         <div class="follow-up-prompt">
           <p>${followUpText}</p>
@@ -363,438 +375,36 @@ async function generatePersonalizedRoutine() {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-/* Update selected products display with RTL awareness */
-function updateSelectedProductsDisplay() {
-  const isRTL = document.documentElement.getAttribute("dir") === "rtl";
-
-  if (selectedProducts.length === 0) {
-    const noProductsText = isRTL
-      ? "لم يتم اختيار منتجات بعد. اختر المنتجات أعلاه لبناء روتينك."
-      : "No products selected yet. Choose products above to build your routine.";
-    selectedProductsList.innerHTML = `<p>${noProductsText}</p>`;
-    return;
-  }
-
-  const countText = isRTL
-    ? `تم اختيار ${selectedProducts.length} منتج`
-    : `${selectedProducts.length} product(s) selected`;
-  const clearAllText = isRTL ? "مسح الكل" : "Clear All";
-
-  selectedProductsList.innerHTML = `
-    <div class="selected-products-header">
-      <span class="selected-count">${countText}</span>
-      <button class="clear-all-btn" onclick="clearAllSelectedProducts()">
-        <i class="fa-solid fa-trash"></i> ${clearAllText}
-      </button>
-    </div>
-    ${selectedProducts
-      .map(
-        (product) => `
-        <div class="selected-product-item">
-          <div class="selected-product-info">
-            <img src="${product.image}" alt="${product.name}">
-            <div>
-              <strong>${product.name}</strong>
-              <span>${product.brand}</span>
-            </div>
-          </div>
-          <button class="remove-product-btn" data-product-id="${product.id}">
-            <i class="fa-solid fa-times"></i>
-          </button>
-        </div>
-      `
-      )
-      .join("")}
-  `;
-
-  /* Add remove button event listeners */
-  const removeButtons = document.querySelectorAll(".remove-product-btn");
-  removeButtons.forEach((button) => {
-    button.addEventListener("click", removeProduct);
-  });
-}
-
-/* Clear all selected products */
-function clearAllSelectedProducts() {
-  /* Clear the array */
-  selectedProducts = [];
-
-  /* Remove from localStorage */
-  localStorage.removeItem("selectedProducts");
-
-  /* Update the display */
-  updateSelectedProductsDisplay();
-
-  /* Update all product cards to show unselected state */
-  const allProductCards = document.querySelectorAll(".product-card");
-  allProductCards.forEach((card) => {
-    card.classList.remove("selected");
-    const selectButton = card.querySelector(".select-product-btn");
-    if (selectButton) {
-      selectButton.innerHTML =
-        '<i class="fa-solid fa-plus"></i> Add to Routine';
-      selectButton.disabled = false;
-    }
-  });
-
-  /* Clear conversation history since routine is no longer valid */
-  conversationHistory = [];
-  chatWindow.innerHTML =
-    "<p>All products cleared! Select some products to get started.</p>";
-}
-
-/* Show initial placeholder until user selects a category */
-productsContainer.innerHTML = `
-  <div class="placeholder-message">
-    Select a category to view products
-  </div>
-`;
-
-/* Load product data from JSON file */
-async function loadProducts() {
-  /* Only fetch if we haven't loaded products yet */
-  if (allProducts.length === 0) {
-    const response = await fetch("products.json");
-    const data = await response.json();
-    allProducts = data.products;
-  }
-  return allProducts;
-}
-
-/* Filter products based on category and search term */
-function filterProducts() {
-  let filteredProducts = allProducts;
-
-  /* Apply category filter if selected */
-  if (currentCategory) {
-    filteredProducts = filteredProducts.filter(
-      (product) => product.category === currentCategory
-    );
-  }
-
-  /* Apply search filter if there's a search term */
-  if (currentSearchTerm) {
-    filteredProducts = filteredProducts.filter((product) => {
-      /* Search in product name, brand, and description */
-      const searchText = currentSearchTerm.toLowerCase();
-      return (
-        product.name.toLowerCase().includes(searchText) ||
-        product.brand.toLowerCase().includes(searchText) ||
-        product.description.toLowerCase().includes(searchText)
-      );
-    });
-  }
-
-  /* Display the filtered products */
-  displayProducts(filteredProducts);
-
-  /* Show helpful message if no products found */
-  if (filteredProducts.length === 0) {
-    productsContainer.innerHTML = `
-      <div class="no-results-message">
-        <i class="fa-solid fa-search"></i>
-        <h3>No products found</h3>
-        <p>Try adjusting your category or search terms</p>
-        <button class="clear-filters-btn" onclick="clearAllFilters()">
-          <i class="fa-solid fa-refresh"></i> Clear Filters
-        </button>
-      </div>
-    `;
-  }
-}
-
-/* Clear all filters and show initial state */
-function clearAllFilters() {
-  currentCategory = "";
-  currentSearchTerm = "";
-  categoryFilter.value = "";
-  productSearch.value = "";
-
-  productsContainer.innerHTML = `
-    <div class="placeholder-message">
-      Select a category to view products
-    </div>
-  `;
-}
-
-/* Create HTML for displaying product cards */
-function displayProducts(products) {
-  productsContainer.innerHTML = products
-    .map(
-      (product) => `
-    <div class="product-card" data-product-id="${product.id}">
-      <img src="${product.image}" alt="${product.name}">
-      <div class="product-info">
-        <h3>${product.name}</h3>
-        <p>${product.brand}</p>
-        
-        <!-- Toggle button for description -->
-        <button class="description-toggle" aria-expanded="false" aria-controls="desc-${product.id}">
-          <i class="fa-solid fa-info-circle"></i>
-          Show Details
-        </button>
-        
-        <!-- Hidden description section -->
-        <div class="product-description" id="desc-${product.id}" hidden>
-          <p>${product.description}</p>
-        </div>
-        
-        <!-- Select product button -->
-        <button class="select-product-btn" data-product-id="${product.id}">
-          <i class="fa-solid fa-plus"></i>
-          Add to Routine
-        </button>
-      </div>
-    </div>
-  `
-    )
-    .join("");
-
-  /* Add click event listeners to all toggle buttons */
-  const toggleButtons = document.querySelectorAll(".description-toggle");
-  toggleButtons.forEach((button) => {
-    button.addEventListener("click", toggleDescription);
-  });
-
-  /* Add click event listeners to all select product buttons */
-  const selectButtons = document.querySelectorAll(".select-product-btn");
-  selectButtons.forEach((button) => {
-    button.addEventListener("click", selectProduct);
-  });
-
-  /* Update visual state for already selected products */
-  updateProductCardsVisualState();
-}
-
-/* Handle product selection */
-async function selectProduct(event) {
-  const productId = event.currentTarget.getAttribute("data-product-id");
-  const products = await loadProducts();
-  const product = products.find((p) => p.id === parseInt(productId));
-
-  /* Check if product is already selected */
-  if (!selectedProducts.find((p) => p.id === product.id)) {
-    selectedProducts.push(product);
-    /* Save to localStorage */
-    saveSelectedProductsToStorage();
-    updateSelectedProductsDisplay();
-
-    /* Update the button to show it's selected */
-    const productCard = document.querySelector(
-      `[data-product-id="${productId}"]`
-    );
-    productCard.classList.add("selected");
-
-    const button = event.currentTarget;
-    button.innerHTML = '<i class="fa-solid fa-check"></i> Added';
-    button.disabled = true;
-  }
-}
-
-/* Generate personalized routine using Cloudflare Worker */
-async function generatePersonalizedRoutine() {
-  if (selectedProducts.length === 0) {
-    chatWindow.innerHTML =
-      "<p>Please select some products first to generate a routine!</p>";
-    return;
-  }
-
-  /* Clear previous conversation and start fresh */
-  conversationHistory = [];
-
-  /* Check if we're in RTL mode */
-  const isRTL = document.documentElement.getAttribute("dir") === "rtl";
-  const loadingText = isRTL
-    ? "جاري إنشاء روتينك الشخصي..."
-    : "Generating your personalized routine...";
-
-  chatWindow.innerHTML = `
-    <p class="loading-message">
-      <i class="fa-solid fa-spinner fa-spin"></i> ${loadingText}
-    </p>
-  `;
-
-  try {
-    /* Prepare the product data for the API */
-    const productData = selectedProducts.map((product) => ({
-      name: product.name,
-      brand: product.brand,
-      category: product.category,
-      description: product.description,
-    }));
-
-    /* Create the system message with RTL awareness */
-    const systemContent = isRTL
-      ? "أنت خبير في مجال التجميل والعناية بالبشرة. قم بإنشاء روتين شخصي باستخدام المنتجات المختارة وأجب على الأسئلة المتعلقة بالروتين."
-      : "You are a beauty and skincare expert. Create personalized routines based on selected products and answer follow-up questions about the routine.";
-
-    const systemMessage = {
-      role: "system",
-      content: systemContent,
-    };
-
-    const userContent = isRTL
-      ? `من فضلك قم بإنشاء روتين شخصي للتجميل/العناية بالبشرة باستخدام هذه المنتجات: ${JSON.stringify(
-          productData
-        )}. 
-
-      يجب أن يتضمن:
-      - خطوات روتين الصباح (إن أمكن)
-      - خطوات روتين المساء (إن أمكن)
-      - ترتيب التطبيق
-      - نصائح للحصول على أفضل النتائج
-      - أي ملاحظات مهمة حول استخدام المنتج
-      
-      قم بتنسيق الإجابة بطريقة واضحة وسهلة المتابعة.`
-      : `Please create a personalized beauty/skincare routine using these products: ${JSON.stringify(
-          productData
-        )}. 
-      
-      Include:
-      - Morning routine steps (if applicable)
-      - Evening routine steps (if applicable)  
-      - Order of application
-      - Tips for best results
-      - Any important notes about product usage
-      
-      Format the response in a clear, easy-to-follow way.`;
-
-    const userMessage = {
-      role: "user",
-      content: userContent,
-    };
-
-    /* Add to conversation history */
-    conversationHistory.push(systemMessage, userMessage);
-
-    /* Send request to Cloudflare Worker instead of directly to OpenAI */
-    const response = await fetch(WORKER_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messages: conversationHistory,
-        max_tokens: 800,
-        temperature: 0.7,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (data.choices && data.choices[0] && data.choices[0].message) {
-      /* Add AI response to conversation history */
-      conversationHistory.push(data.choices[0].message);
-
-      /* Display the AI-generated routine with RTL-aware title */
-      const routineTitle = isRTL
-        ? "روتينك الشخصي"
-        : "Your Personalized Routine";
-      const followUpText = isRTL
-        ? "<strong>💬 هل لديك أسئلة حول روتينك؟</strong> اسألني أي شيء في المحادثة أدناه!"
-        : "<strong>💬 Have questions about your routine?</strong> Ask me anything in the chat below!";
-
-      chatWindow.innerHTML = `
-        <h3>${routineTitle}</h3>
-        <div class="routine-content">
-          ${data.choices[0].message.content.replace(/\n/g, "<br>")}
-        </div>
-        <div class="follow-up-prompt">
-          <p>${followUpText}</p>
-        </div>
-      `;
-    } else {
-      const errorText = isRTL
-        ? "عذراً، لم أتمكن من إنشاء روتين الآن. يرجى المحاولة مرة أخرى."
-        : "Sorry, I couldn't generate a routine right now. Please try again.";
-      chatWindow.innerHTML = `<p>${errorText}</p>`;
-    }
-  } catch (error) {
-    console.error("Error generating routine:", error);
-    const errorText = isRTL
-      ? "عذراً، حدث خطأ أثناء إنشاء الروتين. يرجى المحاولة مرة أخرى."
-      : "Sorry, there was an error generating your routine. Please try again.";
-    chatWindow.innerHTML = `<p>${errorText}</p>`;
-  }
-
-  /* Scroll to bottom of chat */
-  chatWindow.scrollTop = chatWindow.scrollHeight;
-}
-
-/* Update selected products display with RTL awareness */
-function updateSelectedProductsDisplay() {
-  const isRTL = document.documentElement.getAttribute("dir") === "rtl";
-
-  if (selectedProducts.length === 0) {
-    const noProductsText = isRTL
-      ? "لم يتم اختيار منتجات بعد. اختر المنتجات أعلاه لبناء روتينك."
-      : "No products selected yet. Choose products above to build your routine.";
-    selectedProductsList.innerHTML = `<p>${noProductsText}</p>`;
-    return;
-  }
-
-  const countText = isRTL
-    ? `تم اختيار ${selectedProducts.length} منتج`
-    : `${selectedProducts.length} product(s) selected`;
-  const clearAllText = isRTL ? "مسح الكل" : "Clear All";
-
-  selectedProductsList.innerHTML = `
-    <div class="selected-products-header">
-      <span class="selected-count">${countText}</span>
-      <button class="clear-all-btn" onclick="clearAllSelectedProducts()">
-        <i class="fa-solid fa-trash"></i> ${clearAllText}
-      </button>
-    </div>
-    ${selectedProducts
-      .map(
-        (product) => `
-        <div class="selected-product-item">
-          <div class="selected-product-info">
-            <img src="${product.image}" alt="${product.name}">
-            <div>
-              <strong>${product.name}</strong>
-              <span>${product.brand}</span>
-            </div>
-          </div>
-          <button class="remove-product-btn" data-product-id="${product.id}">
-            <i class="fa-solid fa-times"></i>
-          </button>
-        </div>
-      `
-      )
-      .join("")}
-  `;
-
-  /* Add remove button event listeners */
-  const removeButtons = document.querySelectorAll(".remove-product-btn");
-  removeButtons.forEach((button) => {
-    button.addEventListener("click", removeProduct);
-  });
-}
-
-/* Remove product from selection */
-function removeProduct(event) {
-  const productId = parseInt(
-    event.currentTarget.getAttribute("data-product-id")
+/* Function to format citations and links in the AI response */
+function formatCitationsAndLinks(content) {
+  /* Convert URL patterns to clickable links */
+  content = content.replace(
+    /(https?:\/\/[^\s]+)/g,
+    '<a href="$1" target="_blank" class="citation-link">$1</a>'
   );
-  selectedProducts = selectedProducts.filter((p) => p.id !== productId);
-  /* Save to localStorage */
-  saveSelectedProductsToStorage();
-  updateSelectedProductsDisplay();
 
-  /* Update the product card to show it's no longer selected */
-  const productCard = document.querySelector(
-    `[data-product-id="${productId}"]`
+  /* Format citation patterns like [1], [2], etc. */
+  content = content.replace(
+    /\[(\d+)\]/g,
+    '<span class="citation-number">[$1]</span>'
   );
-  if (productCard) {
-    productCard.classList.remove("selected");
-    const selectButton = productCard.querySelector(".select-product-btn");
-    selectButton.innerHTML = '<i class="fa-solid fa-plus"></i> Add to Routine';
-    selectButton.disabled = false;
-  }
+
+  /* Format source indicators */
+  content = content.replace(
+    /Source:/gi,
+    '<strong class="source-label">Source:</strong>'
+  );
+
+  /* Format L'Oréal product mentions to be more prominent */
+  content = content.replace(
+    /(L'Oréal|loreal)/gi,
+    '<strong class="brand-highlight">L\'Oréal</strong>'
+  );
+
+  return content;
 }
 
-/* Chat form submission handler - now uses Cloudflare Worker */
+/* Chat form submission handler - now uses web search */
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -807,7 +417,9 @@ chatForm.addEventListener("submit", async (e) => {
   const isRTL = document.documentElement.getAttribute("dir") === "rtl";
   const youLabel = isRTL ? "أنت:" : "You:";
   const aiLabel = isRTL ? "المساعد الذكي:" : "AI Assistant:";
-  const thinkingText = isRTL ? "المساعد الذكي يفكر..." : "AI is thinking...";
+  const thinkingText = isRTL
+    ? "المساعد الذكي يبحث ويفكر..."
+    : "AI is searching and thinking...";
 
   /* Add user message to chat window */
   chatWindow.innerHTML += `
@@ -816,7 +428,7 @@ chatForm.addEventListener("submit", async (e) => {
     </div>
   `;
 
-  /* Show loading indicator */
+  /* Show loading indicator with web search context */
   chatWindow.innerHTML += `
     <div class="chat-message loading-message">
       <i class="fa-solid fa-spinner fa-spin"></i> ${thinkingText}
@@ -839,8 +451,8 @@ chatForm.addEventListener("submit", async (e) => {
     /* If no conversation history exists, start with system message */
     if (conversationHistory.length === 0) {
       const systemContent = isRTL
-        ? "أنت مستشار مفيد في مجال التجميل والعناية بالبشرة لمنتجات لوريال. قدم نصائح مفيدة حول روتين العناية بالبشرة وتوصيات المنتجات ونصائح التجميل."
-        : "You are a helpful beauty and skincare advisor for L'Oréal products. Provide helpful advice about skincare routines, product recommendations, and beauty tips.";
+        ? "أنت مستشار مفيد في مجال التجميل والعناية بالبشرة لمنتجات لوريال. ابحث في الويب عن أحدث المعلومات لتقديم نصائح محدثة ودقيقة. قم بتضمين المصادر والروابط عندما تكون متاحة."
+        : "You are a helpful L'Oréal beauty and skincare advisor. Search the web for the latest information to provide current and accurate advice. Include sources and links when available.";
 
       conversationHistory.push({
         role: "system",
@@ -851,7 +463,7 @@ chatForm.addEventListener("submit", async (e) => {
     /* Add user message to conversation history */
     conversationHistory.push(newUserMessage);
 
-    /* Send message to Cloudflare Worker instead of directly to OpenAI */
+    /* Send message to Cloudflare Worker with web search enabled */
     const response = await fetch(WORKER_URL, {
       method: "POST",
       headers: {
@@ -859,8 +471,10 @@ chatForm.addEventListener("submit", async (e) => {
       },
       body: JSON.stringify({
         messages: conversationHistory,
-        max_tokens: 500,
+        max_tokens: 800 /* Increased for web search results */,
         temperature: 0.7,
+        web_search: true /* Enable web search for follow-up questions */,
+        include_citations: true /* Request citations */,
       }),
     });
 
@@ -876,10 +490,15 @@ chatForm.addEventListener("submit", async (e) => {
       /* Add AI response to conversation history */
       conversationHistory.push(data.choices[0].message);
 
-      /* Display the AI response */
+      /* Format the response content with citations and links */
+      let formattedResponse = formatCitationsAndLinks(
+        data.choices[0].message.content
+      );
+
+      /* Display the AI response with formatted citations */
       chatWindow.innerHTML += `
         <div class="chat-message ai-message">
-          <strong>${aiLabel}</strong> ${data.choices[0].message.content}
+          <strong>${aiLabel}</strong> ${formattedResponse}
         </div>
       `;
     } else {

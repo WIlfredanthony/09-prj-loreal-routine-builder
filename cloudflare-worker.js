@@ -1,14 +1,6 @@
 /*
- * Cloudflare Worker for L'Oréal Routine Builder
- * This worker handles OpenAI API requests securely without exposing API keys to the client
- *
- * Instructions for students:
- * 1. Go to https://dash.cloudflare.com/
- * 2. Create a new Worker
- * 3. Copy this code into the Worker editor
- * 4. Add your OpenAI API key as an environment variable called OPENAI_API_KEY
- * 5. Deploy the Worker
- * 6. Update the WORKER_URL in your script.js file
+ * Enhanced Cloudflare Worker for L'Oréal Routine Builder with Web Search
+ * This worker handles OpenAI API requests with web search capabilities
  */
 
 /* Handle incoming requests to the worker */
@@ -40,7 +32,13 @@ async function handleRequest(request) {
     const requestBody = await request.json();
 
     /* Extract parameters from the request */
-    const { messages, max_tokens = 500, temperature = 0.7 } = requestBody;
+    const {
+      messages,
+      max_tokens = 500,
+      temperature = 0.7,
+      web_search = false,
+      include_citations = false,
+    } = requestBody;
 
     /* Validate that we have messages */
     if (!messages || !Array.isArray(messages)) {
@@ -53,7 +51,24 @@ async function handleRequest(request) {
       );
     }
 
-    /* Make request to OpenAI API using the gpt-4o model */
+    /* Prepare the API request body */
+    const apiRequestBody = {
+      model: "gpt-4o",
+      messages: messages,
+      max_tokens: max_tokens,
+      temperature: temperature,
+    };
+
+    /* Add web search tools if requested */
+    if (web_search) {
+      apiRequestBody.tools = [
+        {
+          type: "web_search",
+        },
+      ];
+    }
+
+    /* Make request to OpenAI API */
     const openaiResponse = await fetch(
       "https://api.openai.com/v1/chat/completions",
       {
@@ -62,12 +77,7 @@ async function handleRequest(request) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${OPENAI_API_KEY}`, // This comes from environment variables
         },
-        body: JSON.stringify({
-          model: "gpt-4o", // Using the latest GPT-4 model as specified in instructions
-          messages: messages,
-          max_tokens: max_tokens,
-          temperature: temperature,
-        }),
+        body: JSON.stringify(apiRequestBody),
       }
     );
 
