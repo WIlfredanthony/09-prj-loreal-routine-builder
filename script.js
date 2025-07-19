@@ -81,8 +81,11 @@ function clearAllSelectedProducts() {
 
   /* Clear conversation history since routine is no longer valid */
   conversationHistory = [];
-  chatWindow.innerHTML =
-    "<p>All products cleared! Select some products to get started.</p>";
+  const isRTL = document.documentElement.getAttribute("dir") === "rtl";
+  const clearMessage = isRTL
+    ? "تم مسح جميع المنتجات! اختر بعض المنتجات للبدء."
+    : "All products cleared! Select some products to get started.";
+  chatWindow.innerHTML = `<p>${clearMessage}</p>`;
 }
 
 /* Show initial placeholder until user selects a category */
@@ -204,13 +207,38 @@ function displayProducts(products) {
     button.addEventListener("click", selectProduct);
   });
 
+  /* Add click event listeners to product cards for selection */
+  const productCards = document.querySelectorAll(".product-card");
+  productCards.forEach((card) => {
+    card.addEventListener("click", handleCardClick);
+  });
+
   /* Update visual state for already selected products */
   updateProductCardsVisualState();
 }
 
-/* Handle product selection */
-async function selectProduct(event) {
-  const productId = event.currentTarget.getAttribute("data-product-id");
+/* Handle clicking on product card to select/unselect */
+function handleCardClick(event) {
+  /* Don't trigger card selection if user clicked on buttons */
+  if (event.target.closest("button")) {
+    return;
+  }
+
+  const productCard = event.currentTarget;
+  const productId = productCard.getAttribute("data-product-id");
+  const isSelected = productCard.classList.contains("selected");
+
+  if (isSelected) {
+    /* Unselect the product */
+    unselectProduct(productId);
+  } else {
+    /* Select the product */
+    selectProductById(productId);
+  }
+}
+
+/* Select a product by its ID */
+async function selectProductById(productId) {
   const products = await loadProducts();
   const product = products.find((p) => p.id === parseInt(productId));
 
@@ -221,16 +249,124 @@ async function selectProduct(event) {
     saveSelectedProductsToStorage();
     updateSelectedProductsDisplay();
 
-    /* Update the button to show it's selected */
+    /* Update the visual state of the product card */
     const productCard = document.querySelector(
       `[data-product-id="${productId}"]`
     );
-    productCard.classList.add("selected");
-
-    const button = event.currentTarget;
-    button.innerHTML = '<i class="fa-solid fa-check"></i> Added';
-    button.disabled = true;
+    if (productCard) {
+      productCard.classList.add("selected");
+      const selectButton = productCard.querySelector(".select-product-btn");
+      if (selectButton) {
+        selectButton.innerHTML = '<i class="fa-solid fa-check"></i> Added';
+        selectButton.disabled = true;
+      }
+    }
   }
+}
+
+/* Unselect a product by its ID */
+function unselectProduct(productId) {
+  const numericProductId = parseInt(productId);
+  selectedProducts = selectedProducts.filter((p) => p.id !== numericProductId);
+
+  /* Save to localStorage */
+  saveSelectedProductsToStorage();
+  updateSelectedProductsDisplay();
+
+  /* Update the visual state of the product card */
+  const productCard = document.querySelector(
+    `[data-product-id="${productId}"]`
+  );
+  if (productCard) {
+    productCard.classList.remove("selected");
+    const selectButton = productCard.querySelector(".select-product-btn");
+    if (selectButton) {
+      selectButton.innerHTML =
+        '<i class="fa-solid fa-plus"></i> Add to Routine';
+      selectButton.disabled = false;
+    }
+  }
+}
+
+/* Handle product selection from button click */
+async function selectProduct(event) {
+  /* Prevent event bubbling to the card */
+  event.stopPropagation();
+
+  const productId = event.currentTarget.getAttribute("data-product-id");
+  const productCard = document.querySelector(
+    `[data-product-id="${productId}"]`
+  );
+  const isSelected = productCard.classList.contains("selected");
+
+  if (isSelected) {
+    /* Unselect the product */
+    unselectProduct(productId);
+  } else {
+    /* Select the product */
+    await selectProductById(productId);
+  }
+}
+
+/* Update selected products display with RTL awareness */
+function updateSelectedProductsDisplay() {
+  const isRTL = document.documentElement.getAttribute("dir") === "rtl";
+
+  if (selectedProducts.length === 0) {
+    const noProductsText = isRTL
+      ? "لم يتم اختيار منتجات بعد. انقر على البطاقات أعلاه لبناء روتينك."
+      : "No products selected yet. Click on product cards above to build your routine.";
+    selectedProductsList.innerHTML = `<p>${noProductsText}</p>`;
+    return;
+  }
+
+  const countText = isRTL
+    ? `تم اختيار ${selectedProducts.length} منتج`
+    : `${selectedProducts.length} product(s) selected`;
+  const clearAllText = isRTL ? "مسح الكل" : "Clear All";
+
+  selectedProductsList.innerHTML = `
+    <div class="selected-products-header">
+      <span class="selected-count">${countText}</span>
+      <button class="clear-all-btn" onclick="clearAllSelectedProducts()">
+        <i class="fa-solid fa-trash"></i> ${clearAllText}
+      </button>
+    </div>
+    ${selectedProducts
+      .map(
+        (product) => `
+        <div class="selected-product-item">
+          <div class="selected-product-info">
+            <img src="${product.image}" alt="${product.name}">
+            <div>
+              <strong>${product.name}</strong>
+              <span>${product.brand}</span>
+            </div>
+          </div>
+          <button class="remove-product-btn" data-product-id="${product.id}" title="Remove product">
+            <i class="fa-solid fa-times"></i>
+          </button>
+        </div>
+      `
+      )
+      .join("")}
+  `;
+
+  /* Add remove button event listeners */
+  const removeButtons = document.querySelectorAll(".remove-product-btn");
+  removeButtons.forEach((button) => {
+    button.addEventListener("click", removeProduct);
+  });
+}
+
+/* Remove product from selection (from the selected products list) */
+function removeProduct(event) {
+  const productId = parseInt(
+    event.currentTarget.getAttribute("data-product-id")
+  );
+
+  /* Use the unselect function to maintain consistency */
+  unselectProduct(productId.toString());
 }
 
 /* Generate personalized routine using Cloudflare Worker with web search */
